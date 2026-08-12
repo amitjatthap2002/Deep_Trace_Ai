@@ -1,0 +1,336 @@
+DeepTrace AI — Complete Build Prompt
+PROJECT BUILD PROMPT: DeepTrace AI
+====================================
+(AI-Powered Digital Media Authenticity Verification SaaS Platform)
+====================================================================
+1. PROJECT OVERVIEW
+====================================================================
+Build "DeepTrace AI" — a full-stack, production-grade SaaS platform that
+verifies the authenticity of digital media (images, videos, audio) using
+multi-agent AI forensic analysis. The platform detects deepfakes,
+AI-generated content, and manipulated media, and produces a final
+Trust Score (0-100) with a detailed explainable report.
+Target users: media organizations, cybersecurity firms, law enforcement,
+digital forensic investigators, journalists, and fact-checking agencies.
+Core value proposition: Upload any image/video/audio -> get a complete
+forensic breakdown -> receive a Trust Score + AI-generated explainability
+report (JSON + PDF) -> integrate via dashboard or REST API.
+====================================================================
+2. TECH STACK
+====================================================================
+Frontend:
+- React (Vite) + TypeScript
+- TailwindCSS + shadcn/ui for components
+- Recharts / Chart.js for trust score & analysis visualizations
+- React Query for API state management
+- Dropzone-based file upload with progress bar
+Backend:
+- FastAPI (Python 3.11+)
+- LangGraph for multi-agent orchestration
+- LangChain + an LLM provider (Anthropic Claude API) for report generation
+- Celery + Redis for async/background job processing (heavy media analysis)
+- SQLAlchemy ORM + Alembic for migrations
+- PostgreSQL as primary database
+- MinIO / AWS S3 for media file storage
+- JWT-based authentication (access + refresh tokens)
+AI / ML / Forensic Libraries:
+- OpenCV, Pillow, NumPy for image processing
+- exifread / Pillow.ExifTags / hachoir for metadata & EXIF extraction
+- ffmpeg-python for video frame extraction
+- YOLOv8 (Ultralytics) for object detection — used by the Forensic
+ Agent's Object Consistency Check to detect, box, and classify all
+ objects/people in the frame, then compare object scale, placement,
+ and edge boundaries for anomalies (e.g., inconsistent perspective,
+ duplicated/cloned objects, physically implausible object placement)
+- RetinaFace (or MTCNN as fallback) for face detection/localization,
+ feeding face crops into the Deepfake Agent's face-swap/GAN-artifact
+ classifier
+- A pretrained deepfake-detection model (e.g., ONNX/PyTorch CNN or ViT
+ based classifier) — wrap it behind an internal inference service
+- pyAesCrypt / hashlib for SHA256 file integrity hashing
+- Tesseract OCR (pytesseract) for text extraction from media
+- A reverse-image-search integration (e.g., via a search API) for
+ fact/context verification
+- Basic ELA (Error Level Analysis) implemented via JPEG re-compression
+ difference mapping
+- Simple lighting/shadow consistency heuristics via OpenCV contour and
+ gradient analysis, using YOLOv8 object boxes as anchor points to
+ check whether shadow direction is consistent across all detected
+ objects
+Infra:
+- Docker + docker-compose for local dev (api, worker, postgres, redis, minio)
+- .env based configuration management
+- pytest for backend tests
+====================================================================
+3. HIGH-LEVEL SYSTEM WORKFLOW
+====================================================================
+USER
+ -> React Frontend UI
+ -> FastAPI Backend
+ -> Authentication & Validation
+ -> File Upload & SHA256 Hash Generation
+ -> File Integrity Check
+ -> Media Type Identification (Image / Video / Audio / Document)
+ -> LangGraph Agent Orchestrator (parallel execution):
+ - Metadata Agent
+ - Deepfake Agent
+ - Forensic Agent
+ - Context/Fact-Check Agent
+ -> Evidence Aggregation Agent
+ -> Trust Score & Risk Calculation Agent
+ -> LLM Explainability Report Agent
+ -> JSON Report + PDF Report + REST API response
+ -> Dashboard & Visualization
+====================================================================
+4. LANGGRAPH MULTI-AGENT ARCHITECTURE
+====================================================================
+Implement this as a LangGraph StateGraph. Nodes:
+START
+ -> Upload Media Node (persist file, generate hash, store metadata row)
+ -> Media Validation Node (type/size/corruption checks)
+ -> Parallel branch (fan-out) into 4 agents:
+ A) Metadata Agent
+ - EXIF extraction (camera model, software used, timestamps)
+ - GPS coordinate extraction & reverse-geocoding
+ - File creation/modification metadata
+ - SHA256 + perceptual hash generation
+ - Flags: metadata stripped / inconsistent timestamps / editing
+ software signatures (Photoshop, GIMP, FFmpeg re-encode markers)
+ B) Deepfake Agent
+ - Face detection (RetinaFace, MTCNN fallback) + face-swap /
+ GAN-artifact classifier on detected face crops
+ - AI-generated image detection (diffusion model artifact detection)
+ - Video: frame-by-frame sampling + temporal consistency check
+ - Audio: voice clone detection (spectrogram-based classifier)
+ - Lip-sync mismatch detection for video+audio pairs
+ - Output: probability score (fake/real) + confidence + heatmap
+ C) Forensic Agent
+ - Error Level Analysis (ELA)
+ - JPEG double-compression / quantization table analysis
+ - Copy-move forgery detection (keypoint matching, e.g. ORB/SIFT)
+ - Noise pattern / camera sensor fingerprint (PRNU-style) analysis
+ - Shadow consistency check (light direction vs shadow geometry,
+ using YOLOv8-detected object boxes as reference anchors)
+ - Lighting consistency check across objects/faces in frame
+ - Object consistency check: run YOLOv8 to detect all objects,
+ then flag scale mismatches, duplicated/cloned objects, floating
+ or misaligned objects, and boundary/edge anomalies at object
+ contours
+ D) Context / Fact-Check Agent
+ - OCR text extraction from media
+ - Reverse image search across the web
+ - Cross-reference extracted text/claims against fact-check sources
+ - Return matched source URLs, first-seen dates, and context flags
+ -> Evidence Aggregation Node (merge all 4 agent outputs into one
+ structured evidence object)
+ -> Trust Score Calculator Node
+ - Weighted scoring model combining:
+ metadata_integrity_score (15%)
+ deepfake_authenticity_score (35%)
+ forensic_consistency_score (30%)
+ context_verification_score (20%)
+ - Output: trust_score (0-100), risk_level (Low/Medium/High/Critical)
+ -> LLM Report Generator Node
+ - Feed aggregated evidence into an LLM prompt
+ - Generate a human-readable explainability report: summary,
+ key red flags, confidence reasoning, recommendation
+ -> END -> persist FINAL_REPORT row, generate PDF, return JSON via API
+Use conditional edges to skip agents not relevant to the media type
+(e.g., skip Voice Clone Detection for pure images; skip Lip-Sync for
+audio-only files).
+====================================================================
+5. FULL FEATURE LIST (must implement all)
+====================================================================
+- Deepfake Detection
+- Metadata Analysis
+- EXIF Recovery
+- GPS Verification
+- Reverse Image Search
+- AI-Generated Image Detection
+- Video Frame Analysis
+- Voice Clone Detection
+- OCR
+- Object Consistency Check
+- Shadow Consistency
+- Lighting Consistency
+- Compression Analysis
+- Error Level Analysis (ELA)
+- Camera Fingerprint
+- Fake News Cross Verification
+- AI Report Generation (PDF + JSON)
+- Trust Score (0-100) with risk level
+====================================================================
+6. DATABASE SCHEMA (PostgreSQL)
+====================================================================
+Table: users
+ - user_id UUID PK
+ - name VARCHAR
+ - email VARCHAR UNIQUE
+ - password_hash VARCHAR
+ - role VARCHAR (admin/analyst/client)
+ - created_at TIMESTAMP
+Table: media_file
+ - media_id UUID PK
+ - user_id UUID FK -> users
+ - filename VARCHAR
+ - media_type VARCHAR (image/video/audio/document)
+ - storage_path VARCHAR
+ - sha256_hash VARCHAR
+ - file_size_bytes BIGINT
+ - upload_time TIMESTAMP
+ - status VARCHAR (pending/processing/completed/failed)
+Table: metadata
+ - metadata_id UUID PK
+ - media_id UUID FK -> media_file
+ - exif_data JSONB
+ - gps_lat FLOAT
+ - gps_lng FLOAT
+ - capture_timestamp TIMESTAMP
+ - camera_make VARCHAR
+ - camera_model VARCHAR
+ - software_used VARCHAR
+ - flags JSONB
+Table: deepfake_result
+ - result_id UUID PK
+ - media_id UUID FK -> media_file
+ - probability_fake FLOAT
+ - verdict VARCHAR (real/fake/uncertain)
+ - confidence FLOAT
+ - heatmap_path VARCHAR
+ - model_version VARCHAR
+Table: forensic_result
+ - forensic_id UUID PK
+ - media_id UUID FK -> media_file
+ - ela_score FLOAT
+ - shadow_score FLOAT
+ - lighting_score FLOAT
+ - compression_score FLOAT
+ - copy_move_detected BOOLEAN
+ - camera_fingerprint_match BOOLEAN
+ - details JSONB
+Table: fact_check_result
+ - fact_id UUID PK
+ - media_id UUID FK -> media_file
+ - reverse_search_matches JSONB
+ - ocr_text TEXT
+ - verified_sources JSONB
+ - first_seen_date TIMESTAMP
+ - context_flags JSONB
+Table: final_report
+ - report_id UUID PK
+ - media_id UUID FK -> media_file
+ - trust_score FLOAT
+ - risk_level VARCHAR
+ - ai_summary TEXT
+ - pdf_path VARCHAR
+ - created_at TIMESTAMP
+Relationships: users 1-N media_file; media_file 1-1 metadata;
+media_file 1-1 deepfake_result; media_file 1-1 forensic_result;
+media_file 1-1 fact_check_result; media_file 1-1 final_report.
+====================================================================
+7. REST API ENDPOINTS (FastAPI)
+====================================================================
+Auth:
+ POST /api/auth/register
+ POST /api/auth/login
+ POST /api/auth/refresh
+Media:
+ POST /api/media/upload (multipart upload, returns media_id)
+ GET /api/media/{media_id}/status (processing status/progress)
+ GET /api/media/{media_id}/report (full JSON report)
+ GET /api/media/{media_id}/report/pdf (download PDF)
+ GET /api/media (list user's media, paginated)
+ DELETE /api/media/{media_id}
+Dashboard/Analytics:
+ GET /api/dashboard/summary (aggregate stats for logged-in user)
+ GET /api/dashboard/recent
+Admin:
+ GET /api/admin/users
+ GET /api/admin/system-health
+All endpoints (except auth) require JWT Bearer token. Return consistent
+JSON error envelopes with proper HTTP status codes.
+====================================================================
+8. TRUST SCORE CALCULATION LOGIC
+====================================================================
+trust_score = round(
+ 0.15 * metadata_integrity_score +
+ 0.35 * (100 - deepfake_probability_fake) +
+ 0.30 * forensic_consistency_score +
+ 0.20 * context_verification_score
+)
+risk_level mapping:
+ 80-100 -> Low Risk (Likely Authentic)
+ 60-79 -> Medium Risk (Some Inconsistencies)
+ 35-59 -> High Risk (Likely Manipulated)
+ 0-34 -> Critical Risk (Strong Evidence of Manipulation)
+Each sub-score must be independently explainable in the final report
+(list which specific checks contributed positively/negatively).
+====================================================================
+9. FRONTEND PAGES / UI REQUIREMENTS
+====================================================================
+- Landing page: product pitch, feature highlights, CTA to sign up
+- Auth pages: login / register
+- Dashboard: upload widget, recent analyses table, summary stats cards
+- Upload & Analysis flow: drag-drop upload -> live progress (per agent
+ status: Metadata done, Deepfake done, Forensic done, Fact-check done)
+- Report page:
+ - Trust Score gauge/donut chart (0-100)
+ - Risk level badge
+ - Tabs: Metadata | Deepfake | Forensic | Fact-Check | AI Summary
+ - Downloadable PDF button
+ - Visual evidence (ELA heatmap image, face-detection bounding boxes)
+- History/Library page: searchable/filterable list of past analyses
+- Settings page: API key generation for programmatic access
+- Responsive design, dark mode support
+====================================================================
+10. BUILD ORDER / IMPLEMENTATION PLAN
+====================================================================
+Phase 1 - Foundation:
+ 1. Scaffold monorepo: /backend, /frontend, /docker-compose.yml
+ 2. Set up FastAPI app skeleton, PostgreSQL models, Alembic migrations
+ 3. Implement JWT auth (register/login/refresh)
+ 4. Implement file upload endpoint with SHA256 hashing + S3/MinIO storage
+Phase 2 - Agent Pipeline:
+ 5. Build LangGraph StateGraph skeleton with the 4 parallel agent nodes
+ as stub functions returning mock data
+ 6. Implement Metadata Agent (EXIF/GPS extraction) - real logic
+ 7. Implement Forensic Agent (ELA, compression, copy-move, shadow/
+ lighting heuristics) - real logic using OpenCV/Pillow
+ 8. Implement Deepfake Agent - integrate a pretrained model for
+ image/video; stub voice clone detection if no audio model available
+ 9. Implement Context/Fact-Check Agent (OCR + reverse image search)
+ 10. Implement Evidence Aggregation + Trust Score Calculator nodes
+ 11. Implement LLM Report Generator node (Claude API call with
+ structured evidence -> narrative report)
+ 12. Wire pipeline to Celery async task triggered on upload
+Phase 3 - Reporting & API:
+ 13. PDF report generation (e.g., WeasyPrint or ReportLab)
+ 14. Complete all REST endpoints for report retrieval
+ 15. Add admin/dashboard analytics endpoints
+Phase 4 - Frontend:
+ 16. Scaffold React app with routing, auth context, API client
+ 17. Build upload flow with real-time status polling
+ 18. Build report visualization page (charts, tabs, PDF download)
+ 19. Build dashboard, history, and settings pages
+Phase 5 - Hardening:
+ 20. Add tests (pytest for backend agent logic + API tests)
+ 21. Add rate limiting, input validation, file-type/size restrictions
+ 22. Add Dockerfiles for api/worker/frontend + finalize docker-compose
+ 23. Write README with setup instructions and architecture diagram
+====================================================================
+11. NON-FUNCTIONAL REQUIREMENTS
+====================================================================
+- All uploaded media must be virus/malware scanned before processing
+- File size limit: configurable (default 200MB video / 25MB image)
+- All agent processing must be async and non-blocking (Celery workers)
+- System must degrade gracefully: if one agent fails, others still
+ complete and the report notes the missing analysis
+- Full audit log of every analysis request per user
+- Clear separation of concerns: each agent is an independently testable
+ Python module/service, not tightly coupled to the LangGraph node
+====================================================================
+12. DELIVERABLE
+====================================================================
+A working, runnable full-stack application (via `docker-compose up`)
+implementing everything above, with clean, documented, productionquality code, sensible folder structure, environment variable driven
+config, and a README covering setup, architecture, and API usage.
