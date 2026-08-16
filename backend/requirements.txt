@@ -4,11 +4,11 @@ sqlalchemy
 asyncpg
 psycopg2-binary
 alembic
-pydantic
+pydantic[email]
 pydantic-settings
 python-multipart
 passlib[bcrypt]
-pyjwt
+python-jose[cryptography]
 celery
 redis
 langgraph
