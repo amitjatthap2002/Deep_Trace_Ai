@@ -45,7 +45,8 @@ def run_analysis_pipeline(self, media_id: str):
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{media.filename}") as tmp_file:
             tmp_path = tmp_file.name
-            minio_client.fget_object(bucket, object_name, tmp_path)
+            tmp_file.close()
+        minio_client.fget_object(bucket, object_name, tmp_path)
 
         # 3. Run the LangGraph orchestrator
         initial_state = {
@@ -108,6 +109,7 @@ def run_analysis_pipeline(self, media_id: str):
         # Forensic
         f_result = final_state.get("forensic_result") or {}
         details = f_result.get("details") or {}
+        f_result_serializable = {k: v for k, v in f_result.items() if k != "heatmap_bytes"}
         db_forensic = ForensicResult(
             media_id=media_uuid,
             ela_score=details.get("ela_score"),
@@ -115,7 +117,7 @@ def run_analysis_pipeline(self, media_id: str):
             lighting_score=details.get("lighting_score"),
             compression_score=details.get("compression_score"),
             copy_move_detected=details.get("copy_move_detected"),
-            details=f_result
+            details=f_result_serializable
         )
         db.add(db_forensic)
 

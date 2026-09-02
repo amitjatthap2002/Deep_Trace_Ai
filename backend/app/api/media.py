@@ -15,6 +15,33 @@ from app.config import settings
 router = APIRouter()
 
 
+@router.get("")
+async def list_media(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    skip: int = 0,
+    limit: int = 20
+):
+    """List all media uploads for the current user (paginated)."""
+    result = await db.execute(
+        select(MediaFile)
+        .filter(MediaFile.user_id == current_user.user_id)
+        .order_by(MediaFile.upload_time.desc())
+        .offset(skip).limit(limit)
+    )
+    items = result.scalars().all()
+    return [
+        {
+            "media_id": str(m.media_id),
+            "filename": m.filename,
+            "media_type": m.media_type,
+            "status": m.status,
+            "upload_time": m.upload_time.isoformat() if m.upload_time else None,
+        }
+        for m in items
+    ]
+
+
 @router.get("/{media_id}/report")
 async def get_report(
     media_id: uuid.UUID,
@@ -118,31 +145,6 @@ async def download_pdf_report(
     )
 
 
-@router.get("/")
-async def list_media(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    skip: int = 0,
-    limit: int = 20
-):
-    """List all media uploads for the current user (paginated)."""
-    result = await db.execute(
-        select(MediaFile)
-        .filter(MediaFile.user_id == current_user.user_id)
-        .order_by(MediaFile.upload_time.desc())
-        .offset(skip).limit(limit)
-    )
-    items = result.scalars().all()
-    return [
-        {
-            "media_id": str(m.media_id),
-            "filename": m.filename,
-            "media_type": m.media_type,
-            "status": m.status,
-            "upload_time": m.upload_time.isoformat() if m.upload_time else None,
-        }
-        for m in items
-    ]
 
 
 @router.delete("/{media_id}")

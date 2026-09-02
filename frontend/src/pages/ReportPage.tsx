@@ -37,7 +37,10 @@ export default function ReportPage() {
   const { data: report, isLoading, refetch } = useQuery({
     queryKey: ['report', mediaId],
     queryFn: () => api.get(`/media/${mediaId}/report`).then(r => r.data),
-    refetchInterval: (data) => (data?.status === 'completed' || data?.status === 'failed') ? false : 5000,
+    refetchInterval: (query) => {
+      const data = query?.state?.data as any
+      return (data?.status === 'completed' || data?.status === 'failed') ? false : 5000
+    },
     enabled: !!mediaId,
   })
 

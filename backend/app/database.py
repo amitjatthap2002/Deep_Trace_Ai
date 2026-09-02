@@ -1,14 +1,10 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import declarative_base
-import os
+from app.config import settings
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/deeptrace"
-)
+# Database URL is now read from .env via config.py
+engine = create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG)
 
-# SQLAlchemy Async Engine Setup
-engine = create_async_engine(DATABASE_URL, echo=True)
 AsyncSessionLocal = async_sessionmaker(
     bind=engine, class_=AsyncSession, expire_on_commit=False
 )

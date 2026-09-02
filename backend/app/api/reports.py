@@ -1,4 +1,5 @@
 import uuid
+import threading
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,179 @@ from app.minio_utils import get_minio_client
 import hashlib
 
 router = APIRouter()
+
+
+def _run_analysis_in_background(media_id: str):
+    """
+    Runs the full analysis pipeline in a background thread.
+    Uses sync DB session since this runs outside the async event loop.
+    """
+    import os
+    import tempfile
+    import io
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.agents.orchestrator import orchestrator_app
+    from app.models.media import MediaFile, DeepfakeResult, ForensicResult, FactCheckResult, FinalReport, Metadata
+    from app.minio_utils import get_minio_client
+    from app.config import settings
+    from app.pdf_report import generate_pdf_report
+
+    SYNC_DB_URL = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+    engine = create_engine(SYNC_DB_URL)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    db = SessionLocal()
+    media = None
+    try:
+        media_uuid = uuid.UUID(media_id)
+        media = db.query(MediaFile).filter(MediaFile.media_id == media_uuid).first()
+        if not media:
+            print(f"[Analysis] Media {media_id} not found in DB")
+            return
+
+        media.status = "processing"
+        db.commit()
+
+        # Download file from MinIO
+        minio_client = get_minio_client()
+        bucket, object_name = media.storage_path.split("/", 1)
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{media.filename}") as tmp_file:
+            tmp_path = tmp_file.name
+            tmp_file.close() # Close immediately so other processes/minio can open it on Windows
+        
+        minio_client.fget_object(bucket, object_name, tmp_path)
+
+        # Run the LangGraph orchestrator
+        initial_state = {
+            "media_id": media_id,
+            "file_path": tmp_path,
+            "media_type": media.media_type,
+            "metadata_result": None,
+            "deepfake_result": None,
+            "forensic_result": None,
+            "fact_check_result": None,
+            "aggregated_evidence": None,
+            "trust_score": None,
+            "risk_level": None,
+            "report_text": None,
+            "errors": []
+        }
+
+        print(f"[Analysis] Starting orchestrator for {media_id}")
+        final_state = orchestrator_app.invoke(initial_state)
+        print(f"[Analysis] Orchestrator completed for {media_id}")
+
+        # Persist results to DB
+        m_result = final_state.get("metadata_result") or {}
+        db_meta = Metadata(
+            media_id=media_uuid,
+            exif_data=m_result.get("exif_data"),
+            gps_lat=m_result.get("gps_lat"),
+            gps_lng=m_result.get("gps_lng"),
+            camera_make=m_result.get("camera_make"),
+            camera_model=m_result.get("camera_model"),
+            software_used=m_result.get("software_used"),
+            flags=m_result.get("flags")
+        )
+        db.add(db_meta)
+
+        d_result = final_state.get("deepfake_result") or {}
+        db_deepfake = DeepfakeResult(
+            media_id=media_uuid,
+            probability_fake=d_result.get("probability_fake"),
+            verdict=d_result.get("verdict"),
+            confidence=d_result.get("confidence"),
+            model_version=d_result.get("model_version", "heuristic-v1")
+        )
+        db.add(db_deepfake)
+
+        # Upload heatmap if available
+        heatmap_bytes = d_result.get("heatmap_bytes") or (final_state.get("forensic_result") or {}).get("heatmap_bytes")
+        if heatmap_bytes:
+            heatmap_obj_name = f"heatmaps/{media_id}_heatmap.jpg"
+            minio_client.put_object(
+                bucket, heatmap_obj_name,
+                io.BytesIO(heatmap_bytes),
+                len(heatmap_bytes),
+                content_type="image/jpeg"
+            )
+            db_deepfake.heatmap_path = f"{bucket}/{heatmap_obj_name}"
+
+        f_result = final_state.get("forensic_result") or {}
+        details = f_result.get("details") or {}
+        f_result_serializable = {k: v for k, v in f_result.items() if k != "heatmap_bytes"}
+        db_forensic = ForensicResult(
+            media_id=media_uuid,
+            ela_score=details.get("ela_score"),
+            shadow_score=details.get("shadow_score"),
+            lighting_score=details.get("lighting_score"),
+            compression_score=details.get("compression_score"),
+            copy_move_detected=details.get("copy_move_detected"),
+            details=f_result_serializable
+        )
+        db.add(db_forensic)
+
+        fc_result = final_state.get("fact_check_result") or {}
+        db_fact = FactCheckResult(
+            media_id=media_uuid,
+            reverse_search_matches=fc_result.get("reverse_search_matches"),
+            ocr_text=fc_result.get("ocr_text"),
+            verified_sources=fc_result.get("verified_sources"),
+            context_flags=fc_result.get("context_flags")
+        )
+        db.add(db_fact)
+
+        db_report = FinalReport(
+            media_id=media_uuid,
+            trust_score=final_state.get("trust_score"),
+            risk_level=final_state.get("risk_level"),
+            ai_summary=final_state.get("report_text")
+        )
+        db.add(db_report)
+        db.flush()
+
+        # Generate PDF
+        evidence = final_state.get("aggregated_evidence") or {}
+        sub_scores = evidence.get("sub_scores", {})
+        try:
+            pdf_bytes = generate_pdf_report(
+                media_filename=media.filename,
+                trust_score=final_state.get("trust_score") or 0,
+                risk_level=final_state.get("risk_level") or "Unknown",
+                report_text=final_state.get("report_text") or "",
+                sub_scores=sub_scores,
+                forensic=f_result
+            )
+            pdf_obj_name = f"reports/{media_id}_report.pdf"
+            minio_client.put_object(
+                bucket, pdf_obj_name,
+                io.BytesIO(pdf_bytes), len(pdf_bytes),
+                content_type="application/pdf"
+            )
+            db_report.pdf_path = f"{bucket}/{pdf_obj_name}"
+        except Exception as pdf_err:
+            print(f"[Analysis] PDF generation failed (non-fatal): {pdf_err}")
+
+        media.status = "completed"
+        db.commit()
+        print(f"[Analysis] SUCCESS Completed for {media_id}, trust_score={final_state.get('trust_score')}")
+
+        # Cleanup temp file
+        os.unlink(tmp_path)
+
+    except Exception as exc:
+        print(f"[Analysis] ERROR Failed for {media_id}: {exc}")
+        import traceback
+        traceback.print_exc()
+        db.rollback()
+        if media:
+            media.status = "failed"
+            db.commit()
+    finally:
+        db.close()
+        engine.dispose()
 
 
 @router.post("/upload")
@@ -69,9 +243,13 @@ async def upload_media(
     await db.commit()
     await db.refresh(new_media)
 
-    # Trigger Celery background analysis task
-    from app.worker.tasks import run_analysis_pipeline
-    run_analysis_pipeline.delay(str(new_media.media_id))
+    # Run analysis in background thread (no Redis/Celery needed)
+    thread = threading.Thread(
+        target=_run_analysis_in_background,
+        args=(str(new_media.media_id),),
+        daemon=True
+    )
+    thread.start()
 
     return {
         "message": "File uploaded successfully. Analysis started.",
