@@ -53,7 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { access_token, refresh_token } = res.data
     localStorage.setItem('access_token', access_token)
     localStorage.setItem('refresh_token', refresh_token)
-    const userObj = { user_id: '', name, email, role: 'client' }
+    const payload = JSON.parse(atob(access_token.split('.')[1]))
+    const userObj = { user_id: payload.sub, name, email, role: 'client' }
     localStorage.setItem('user', JSON.stringify(userObj))
     setUser(userObj)
   }

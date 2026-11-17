@@ -12,9 +12,7 @@ from app.pdf_report import generate_pdf_report
 import io
 
 # Sync database engine for Celery (Celery doesn't use async)
-SYNC_DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/deeptrace")
-# Replace asyncpg with psycopg2 for sync
-SYNC_DB_URL = SYNC_DB_URL.replace("postgresql+asyncpg://", "postgresql://")
+SYNC_DB_URL = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
 
 engine = create_engine(SYNC_DB_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -20,9 +20,7 @@ def metadata_agent_node(state: AgentState) -> dict:
             file_bytes = f.read()
         result = run_metadata_agent(state["file_path"], file_bytes, state["media_type"])
     except Exception as e:
-        errors = state.get("errors", [])
-        errors.append(f"Metadata Agent failed: {str(e)}")
-        return {"metadata_result": None, "errors": errors}
+        return {"metadata_result": None, "errors": [f"Metadata Agent failed: {str(e)}"]}
     return {"metadata_result": result}
 
 
@@ -33,9 +31,7 @@ def deepfake_agent_node(state: AgentState) -> dict:
             file_bytes = f.read()
         result = run_deepfake_agent(file_bytes, state["media_type"])
     except Exception as e:
-        errors = state.get("errors", [])
-        errors.append(f"Deepfake Agent failed: {str(e)}")
-        return {"deepfake_result": None, "errors": errors}
+        return {"deepfake_result": None, "errors": [f"Deepfake Agent failed: {str(e)}"]}
     return {"deepfake_result": result}
 
 
@@ -46,9 +42,7 @@ def forensic_agent_node(state: AgentState) -> dict:
             file_bytes = f.read()
         result = run_forensic_agent(file_bytes, state["media_type"])
     except Exception as e:
-        errors = state.get("errors", [])
-        errors.append(f"Forensic Agent failed: {str(e)}")
-        return {"forensic_result": None, "errors": errors}
+        return {"forensic_result": None, "errors": [f"Forensic Agent failed: {str(e)}"]}
     return {"forensic_result": result}
 
 
@@ -59,9 +53,7 @@ def fact_check_agent_node(state: AgentState) -> dict:
             file_bytes = f.read()
         result = run_fact_check_agent(file_bytes, state["media_type"])
     except Exception as e:
-        errors = state.get("errors", [])
-        errors.append(f"Fact-Check Agent failed: {str(e)}")
-        return {"fact_check_result": None, "errors": errors}
+        return {"fact_check_result": None, "errors": [f"Fact-Check Agent failed: {str(e)}"]}
     return {"fact_check_result": result}
 
 
@@ -81,7 +73,8 @@ def trust_score_calculator_node(state: AgentState) -> dict:
     score_data = calculate_trust_score(state.get("aggregated_evidence", {}))
     return {
         "trust_score": score_data["trust_score"],
-        "risk_level": score_data["risk_level"]
+        "risk_level": score_data["risk_level"],
+        "explanations": score_data.get("explanations", [])
     }
 
 
@@ -92,7 +85,7 @@ def llm_report_generator_node(state: AgentState) -> dict:
         "trust_score": state.get("trust_score"),
         "risk_level": state.get("risk_level"),
         "sub_scores": evidence.get("sub_scores", {}),
-        "explanations": []
+        "explanations": state.get("explanations") or []
     }
     report_text = generate_llm_report(evidence, score_data)
     return {"report_text": report_text}

@@ -2,6 +2,11 @@ import os
 from typing import Dict, Any
 import anthropic
 
+try:
+    from app.config import settings
+except ImportError:
+    from config import settings  # type: ignore
+
 
 def generate_llm_report(evidence: Dict[str, Any], trust_score_data: Dict[str, Any]) -> str:
     """
@@ -9,7 +14,7 @@ def generate_llm_report(evidence: Dict[str, Any], trust_score_data: Dict[str, An
     a human-readable, explainable forensic report.
     Falls back to a template-based report if no API key is set.
     """
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = (settings.ANTHROPIC_API_KEY or os.getenv("ANTHROPIC_API_KEY", "")).strip()
 
     trust_score = trust_score_data.get("trust_score", 0)
     risk_level = trust_score_data.get("risk_level", "Unknown")
@@ -70,11 +75,14 @@ Key Algorithmic Explanations:
 Write the report in a clear, professional tone suitable for cybersecurity professionals and journalists.
 """
             message = client.messages.create(
-                model="claude-opus-4-5",
+                model="claude-3-5-sonnet-20241022",
                 max_tokens=1024,
                 messages=[{"role": "user", "content": prompt}]
             )
-            return message.content[0].text
+            for block in message.content:
+                if hasattr(block, "text"):
+                    return getattr(block, "text")
+            return str(message.content[0]) if message.content else ""
         except Exception as e:
             # Fall back to template
             return _generate_template_report(trust_score, risk_level, sub_scores, explanations, e)

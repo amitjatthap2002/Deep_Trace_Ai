@@ -1,4 +1,5 @@
-from typing import TypedDict, Optional, List, Dict, Any
+import operator
+from typing import TypedDict, Optional, List, Dict, Any, Annotated
 
 class AgentState(TypedDict):
     media_id: str
@@ -18,6 +19,7 @@ class AgentState(TypedDict):
     trust_score: Optional[float]
     risk_level: Optional[str]
     report_text: Optional[str]
+    explanations: Optional[List[str]]
     
-    # Error tracking
-    errors: List[str]
+    # Error tracking (with reducer for parallel branches)
+    errors: Annotated[List[str], operator.add]

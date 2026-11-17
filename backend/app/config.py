@@ -1,8 +1,10 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
-# Load .env file from the backend directory
-load_dotenv()
+# Load .env file from the backend directory regardless of cwd
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BACKEND_DIR / ".env")
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "DeepTrace AI"
@@ -15,7 +17,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:amit%40%232002@127.0.0.1:5432/deeptrace_db"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/deeptrace_db"
 
     # MinIO Settings
     MINIO_URL: str = "localhost:9000"
@@ -30,7 +32,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     class Config:
-        env_file = ".env"
+        env_file = str(BACKEND_DIR / ".env")
         env_file_encoding = "utf-8"
         extra = "ignore"
 

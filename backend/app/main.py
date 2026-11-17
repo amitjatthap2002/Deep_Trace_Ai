@@ -1,9 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.api import auth, dashboard, admin
-from app.api.media import router as upload_router
-from app.api.reports import router as report_router
+from app.api import auth, dashboard, admin, media
 
 app = FastAPI(
     title="DeepTrace AI",
@@ -36,7 +34,6 @@ async def root():
 
 # Register all routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(upload_router, prefix="/api/media", tags=["Media Upload"])
-app.include_router(report_router, prefix="/api/media", tags=["Reports"])
+app.include_router(media.router, prefix="/api/media", tags=["Media & Analysis"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
