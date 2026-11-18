@@ -7,8 +7,20 @@ try:
 except ImportError:
     from config import settings  # type: ignore
 
-# Database URL is now read from .env via config.py
-engine = create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG)
+# Normalize Database URL for asyncpg and cloud providers (e.g. Neon, Supabase)
+db_url = settings.DATABASE_URL
+if db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+connect_args = {}
+if "sslmode=require" in db_url or "ssl=require" in db_url or "neon.tech" in db_url:
+    if "?" in db_url:
+        base, query = db_url.split("?", 1)
+        params = [p for p in query.split("&") if not p.startswith("ssl")]
+        db_url = f"{base}?{'&'.join(params)}" if params else base
+    connect_args["ssl"] = True
+
+engine = create_async_engine(db_url, echo=settings.DEBUG, connect_args=connect_args)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine, class_=AsyncSession, expire_on_commit=False
