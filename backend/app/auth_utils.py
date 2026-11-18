@@ -1,6 +1,6 @@
 import bcrypt
 from datetime import datetime, timedelta
-from jose import jwt
+from jose import jwt  # type: ignore
 from app.config import settings
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

@@ -69,7 +69,7 @@ class RefreshRequest(BaseModel):
 async def refresh_token(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
     # In a real scenario, you'd decode and verify the refresh token here
     # For now, this is a basic stub
-    from jose import jwt, JWTError
+    from jose import jwt, JWTError  # type: ignore
     try:
         payload = jwt.decode(request.refresh_token, settings.JWT_SECRET, algorithms=[settings.ALGORITHM])
         user_id = payload.get("sub")
