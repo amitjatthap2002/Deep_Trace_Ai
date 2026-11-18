@@ -11,11 +11,20 @@ from app.config import settings
 from app.pdf_report import generate_pdf_report
 import io
 
-# Sync database engine for Celery (Celery doesn't use async)
-SYNC_DB_URL = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+from app.database import clean_database_url
 
-engine = create_engine(SYNC_DB_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+_sync_engine = None
+_SyncSessionLocal = None
+
+
+def get_sync_db():
+    global _sync_engine, _SyncSessionLocal
+    if _SyncSessionLocal is None:
+        raw_url = clean_database_url(settings.DATABASE_URL)
+        sync_url = raw_url.replace("postgresql+asyncpg://", "postgresql://")
+        _sync_engine = create_engine(sync_url)
+        _SyncSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_sync_engine)
+    return _SyncSessionLocal()
 
 
 @celery.task(bind=True, max_retries=3)
@@ -24,7 +33,7 @@ def run_analysis_pipeline(self, media_id: str):
     Celery task: Downloads the media file from MinIO, runs the full LangGraph 
     orchestration pipeline, and saves all agent results to the database.
     """
-    db = SessionLocal()
+    db = get_sync_db()
     try:
         # 1. Load MediaFile record
         media_uuid = uuid.UUID(media_id)

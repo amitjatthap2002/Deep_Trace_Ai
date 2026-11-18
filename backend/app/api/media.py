@@ -34,7 +34,9 @@ def _run_analysis_in_background(media_id: str):
     from app.config import settings
     from app.pdf_report import generate_pdf_report
 
-    SYNC_DB_URL = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+    from app.database import clean_database_url
+    raw_url = clean_database_url(settings.DATABASE_URL)
+    SYNC_DB_URL = raw_url.replace("postgresql+asyncpg://", "postgresql://")
     engine = create_engine(SYNC_DB_URL)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

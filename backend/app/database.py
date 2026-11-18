@@ -7,8 +7,19 @@ try:
 except ImportError:
     from config import settings  # type: ignore
 
+def clean_database_url(url: str) -> str:
+    """Strips quotes, spaces, and psql CLI prefixes if pasted from cloud consoles (Neon, Supabase)."""
+    if not url:
+        return ""
+    cleaned = str(url).strip()
+    if cleaned.startswith("psql "):
+        cleaned = cleaned[5:].strip()
+    cleaned = cleaned.strip("'").strip('"').strip()
+    return cleaned
+
+
 # Normalize Database URL for asyncpg and cloud providers (e.g. Neon, Supabase)
-db_url = settings.DATABASE_URL
+db_url = clean_database_url(settings.DATABASE_URL)
 if db_url.startswith("postgresql://"):
     db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
