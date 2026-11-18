@@ -3,8 +3,9 @@ from minio.error import S3Error
 from app.config import settings
 
 def get_minio_client():
-    # Remove http:// or https:// from MINIO_URL if present because minio python client expects just the endpoint
-    endpoint = settings.MINIO_URL.replace("http://", "").replace("https://", "")
+    # Remove http:// or https:// if present because minio python client expects just the host:port
+    endpoint_val = getattr(settings, "MINIO_ENDPOINT", "") or settings.MINIO_URL
+    endpoint = endpoint_val.replace("http://", "").replace("https://", "")
     client = Minio(
         endpoint,
         access_key=settings.MINIO_ACCESS_KEY,

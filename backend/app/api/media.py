@@ -245,13 +245,23 @@ async def upload_media(
     await db.commit()
     await db.refresh(new_media)
 
-    # Run analysis pipeline in background thread
-    thread = threading.Thread(
-        target=_run_analysis_in_background,
-        args=(str(new_media.media_id),),
-        daemon=True
-    )
-    thread.start()
+    # Dispatch analysis: Prefer Celery worker in production if available, fall back to background thread
+    dispatched = False
+    try:
+        from app.worker.tasks import run_analysis_pipeline
+        run_analysis_pipeline.delay(str(new_media.media_id))
+        dispatched = True
+        print(f"[Dispatch] Dispatched task to Celery for {new_media.media_id}")
+    except Exception as celery_err:
+        print(f"[Dispatch] Celery not active ({celery_err}), falling back to background thread")
+
+    if not dispatched:
+        thread = threading.Thread(
+            target=_run_analysis_in_background,
+            args=(str(new_media.media_id),),
+            daemon=True
+        )
+        thread.start()
 
     return {
         "message": "File uploaded successfully. Analysis started.",
