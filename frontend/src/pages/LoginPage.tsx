@@ -20,7 +20,14 @@ export default function LoginPage() {
       await login(email, password)
       navigate('/dashboard')
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Invalid email or password. Please verify your credentials.')
+      const detail = err.response?.data?.detail
+      if (typeof detail === 'string') {
+        setError(detail)
+      } else if (Array.isArray(detail) && detail.length > 0) {
+        setError(detail.map((d: any) => d.msg || d.message).join(', '))
+      } else {
+        setError('Invalid email or password. Please verify your credentials.')
+      }
     } finally {
       setLoading(false)
     }

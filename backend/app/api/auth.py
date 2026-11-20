@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from pydantic import BaseModel, EmailStr
+from sqlalchemy import func
+from pydantic import BaseModel, field_validator
 from app.database import get_db
 from app.models.user import User
 from app.auth_utils import get_password_hash, verify_password, create_access_token, create_refresh_token
@@ -11,12 +12,40 @@ router = APIRouter()
 
 class UserCreate(BaseModel):
     name: str
-    email: EmailStr
+    email: str
     password: str
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not v or "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("Please provide a valid email address (e.g. user@domain.com)")
+        return v
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Name cannot be empty")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("Password must be at least 6 characters")
+        return v
+
 class UserLogin(BaseModel):
-    email: EmailStr
+    email: str
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_login_email(cls, v: str) -> str:
+        return v.strip().lower()
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -25,11 +54,11 @@ class TokenResponse(BaseModel):
 
 @router.post("/register", response_model=TokenResponse)
 async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
-    # Check if user exists
-    result = await db.execute(select(User).filter(User.email == user.email))
+    # Check if user exists (case-insensitive)
+    result = await db.execute(select(User).filter(func.lower(User.email) == user.email))
     existing_user = result.scalars().first()
     if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="This email is already registered. Please sign in.")
 
     # Create new user
     hashed_password = get_password_hash(user.password)
@@ -50,11 +79,11 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(user: UserLogin, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).filter(User.email == user.email))
+    result = await db.execute(select(User).filter(func.lower(User.email) == user.email))
     db_user = result.scalars().first()
     
     if not db_user or not verify_password(user.password, db_user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise HTTPException(status_code=401, detail="Invalid email or password. Please verify your credentials or register.")
 
     # Generate tokens
     access_token = create_access_token(data={"sub": str(db_user.user_id)})
